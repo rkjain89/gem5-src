@@ -107,7 +107,7 @@ Walker::start(ThreadContext * _tc, BaseTLB::Translation *_translation,
 
 Fault
 Walker::startFunctional(ThreadContext * _tc, Addr &addr, unsigned &logBytes,
-              BaseTLB::Mode _mode)
+                        BaseTLB::Mode _mode)
 {
     funcState.initState(_tc, _mode);
     return funcState.startFunctional(addr, logBytes);
@@ -276,131 +276,145 @@ Fault
 Walker::WalkerState::stepWalk(PacketPtr &write)
 {
     assert(state != Ready && state != Waiting);
+
     Fault fault = NoFault;
-    write = NULL;
+    write       = NULL;
+
     PageTableEntry pte;
+    
     if (dataSize == 8)
-        pte = read->get<uint64_t>();
+      pte = read->get<uint64_t>();
     else
-        pte = read->get<uint32_t>();
-    VAddr vaddr = entry.vaddr;
-    bool uncacheable = pte.pcd;
-    Addr nextRead = 0;
-    bool doWrite = false;
-    bool doTLBInsert = false;
-    bool doEndWalk = false;
-    bool badNX = pte.nx && mode == BaseTLB::Execute && enableNX;
+      pte = read->get<uint32_t>();
+
+    VAddr vaddr       = entry.vaddr;
+    bool  uncacheable = pte.pcd;
+    Addr  nextRead    = 0;
+    bool  doWrite     = false;
+    bool  doTLBInsert = false;
+    bool  doEndWalk   = false;
+    bool  badNX       = pte.nx && mode == BaseTLB::Execute && enableNX;
+
     static int counter = 0;
+
     switch(state) {
       case LongPML4:
-        while (counter != 3) {
+        if (counter != 3) {
           ++counter;
-          break;
+          nextState      = LongPML4;
+          nextRead       = read->getAddr();
+          uncacheable    = true;
+        } else {
+          counter        = 0;
+          nextRead       = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl3 * dataSize;
+          nextState      = LongPDP;
+          doWrite        = !pte.a;
+          pte.a          = 1;
+          entry.writable = pte.w;
+          entry.noExec   = pte.nx;
+          entry.user     = pte.u;
         }
-        
-        counter =0;
 
         DPRINTF(PageTableWalker,
                 "Got long mode PML4 entry %#016x.\n", (uint64_t)pte);
-        nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl3 * dataSize;
-        doWrite = !pte.a;
-        pte.a = 1;
-        entry.writable = pte.w;
-        entry.user = pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
             fault = pageFault(pte.p);
             break;
         }
-        entry.noExec = pte.nx;
-        nextState = LongPDP;
         break;
       case LongPDP:
-        while (counter != 3) {
+        if (counter != 3) {
+          nextState      = LongPDP;
+          nextRead       = read->getAddr();
+          uncacheable    = true;
           ++counter;
-          break;
+        } else {
+          counter        = 0;
+          nextState      = LongPD;
+          nextRead       = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl2 * dataSize;
+          doWrite        = !pte.a;
+          pte.a          = 1;
+          entry.writable = entry.writable && pte.w;
+          entry.user     = entry.user && pte.u;
         }
-        
-        counter =0;
 
         DPRINTF(PageTableWalker,
                 "Got long mode PDP entry %#016x.\n", (uint64_t)pte);
-        nextRead = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl2 * dataSize;
-        doWrite = !pte.a;
-        pte.a = 1;
-        entry.writable = entry.writable && pte.w;
-        entry.user = entry.user && pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
             fault = pageFault(pte.p);
             break;
         }
-        nextState = LongPD;
         break;
       case LongPD:
-        while (counter != 3) {
+        if (counter != 3) {
+          nextState      = LongPD;
+          nextRead       = read->getAddr();
+          uncacheable    = true;
           ++counter;
-          break;
+        } else {
+          counter =0;
+          if (!pte.ps) {
+            // 4 KB page
+            entry.logBytes = 12;
+            nextRead       = ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl1 * dataSize;
+            nextState      = LongPTE;
+            break;
+          } else {
+            // 2 MB page
+            entry.logBytes    = 21;
+            entry.paddr       = (uint64_t)pte & (mask(31) << 21);
+            entry.uncacheable = uncacheable;
+            entry.global      = pte.g;
+            entry.patBit      = bits(pte, 12);
+            entry.vaddr       = entry.vaddr & ~((2 * (1 << 20)) - 1);
+            doTLBInsert       = true;
+            doEndWalk         = true;
+            break;
+          }
+          entry.writable = entry.writable && pte.w;
+          entry.user     = entry.user && pte.u;
+          doWrite        = !pte.a;
+          pte.a          = 1;
         }
-        
-        counter =0;
 
         DPRINTF(PageTableWalker,
                 "Got long mode PD entry %#016x.\n", (uint64_t)pte);
-        doWrite = !pte.a;
-        pte.a = 1;
-        entry.writable = entry.writable && pte.w;
-        entry.user = entry.user && pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
             fault = pageFault(pte.p);
             break;
         }
-        if (!pte.ps) {
-            // 4 KB page
-            entry.logBytes = 12;
-            nextRead =
-                ((uint64_t)pte & (mask(40) << 12)) + vaddr.longl1 * dataSize;
-            nextState = LongPTE;
-            break;
-        } else {
-            // 2 MB page
-            entry.logBytes = 21;
-            entry.paddr = (uint64_t)pte & (mask(31) << 21);
-            entry.uncacheable = uncacheable;
-            entry.global = pte.g;
-            entry.patBit = bits(pte, 12);
-            entry.vaddr = entry.vaddr & ~((2 * (1 << 20)) - 1);
-            doTLBInsert = true;
-            doEndWalk = true;
-            break;
-        }
+        break;
       case LongPTE:
-        while (counter != 3) {
+        if (counter != 3) {
+          nextState      = LongPTE;
+          nextRead       = read->getAddr();
+          uncacheable    = true;
           ++counter;
-          break;
+        } else {
+          counter           = 0;
+          doTLBInsert       = true;
+          doEndWalk         = true;
+          entry.paddr       = (uint64_t)pte & (mask(40) << 12);
+          entry.uncacheable = uncacheable;
+          entry.global      = pte.g;
+          entry.patBit      = bits(pte, 12);
+          entry.vaddr       = entry.vaddr & ~((4 * (1 << 10)) - 1);
+          doWrite           = !pte.a;
+          pte.a             = 1;
+          entry.writable    = entry.writable && pte.w;
+          entry.user = entry.user && pte.u;
         }
-        
-        counter =0;
 
         DPRINTF(PageTableWalker,
                 "Got long mode PTE entry %#016x.\n", (uint64_t)pte);
-        doWrite = !pte.a;
-        pte.a = 1;
-        entry.writable = entry.writable && pte.w;
-        entry.user = entry.user && pte.u;
         if (badNX || !pte.p) {
             doEndWalk = true;
             fault = pageFault(pte.p);
             break;
         }
-        entry.paddr = (uint64_t)pte & (mask(40) << 12);
-        entry.uncacheable = uncacheable;
-        entry.global = pte.g;
-        entry.patBit = bits(pte, 12);
-        entry.vaddr = entry.vaddr & ~((4 * (1 << 10)) - 1);
-        doTLBInsert = true;
-        doEndWalk = true;
         break;
       case PAEPDP:
         DPRINTF(PageTableWalker,
@@ -540,26 +554,26 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
                 walker->tlb->insert(entry.vaddr, entry);
         endWalk();
     } else {
-        PacketPtr oldRead = read;
-        //If we didn't return, we're setting up another read.
-        Request::Flags flags = oldRead->req->getFlags();
-        flags.set(Request::UNCACHEABLE, uncacheable);
-        RequestPtr request =
-            new Request(nextRead, oldRead->getSize(), flags, walker->masterId);
-        read = new Packet(request, MemCmd::ReadReq);
-        read->allocate();
-        // If we need to write, adjust the read packet to write the modified
-        // value back to memory.
-        if (doWrite) {
-            write = oldRead;
-            write->set<uint64_t>(pte);
-            write->cmd = MemCmd::WriteReq;
-            write->clearDest();
-        } else {
-            write = NULL;
-            delete oldRead->req;
-            delete oldRead;
-        }
+      PacketPtr oldRead = read;
+      //If we didn't return, we're setting up another read.
+      Request::Flags flags = oldRead->req->getFlags();
+      flags.set(Request::UNCACHEABLE, uncacheable);
+      RequestPtr request =
+        new Request(nextRead, oldRead->getSize(), flags, walker->masterId);
+      read = new Packet(request, MemCmd::ReadReq);
+      read->allocate();
+      // If we need to write, adjust the read packet to write the modified
+      // value back to memory.
+      if (doWrite) {
+        write = oldRead;
+        write->set<uint64_t>(pte);
+        write->cmd = MemCmd::WriteReq;
+        write->clearDest();
+      } else {
+        write = NULL;
+        delete oldRead->req;
+        delete oldRead;
+      }
     }
     return fault;
 }
@@ -652,7 +666,7 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
         nextState = Waiting;
         if (timingFault == NoFault) {
             /*
-             * Finish the translation. Now that we now the right entry is
+             * Finish the translation. Now that we know the right entry is
              * in the TLB, this should work with no memory accesses.
              * There could be new faults unrelated to the table walk like
              * permissions violations, so we'll need the return value as

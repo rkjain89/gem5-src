@@ -337,6 +337,7 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
             TlbEntry *entry = lookup(vaddr);
             if (!entry) {
                 if (FullSystem) {
+                    // Fault tsbFault = tsb->lookup(vaddr);
                     Fault fault = walker->start(tc, translation, req, mode);
                     if (timing || fault != NoFault) {
                         // This gets ignored in atomic mode.
