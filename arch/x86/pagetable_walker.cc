@@ -184,9 +184,9 @@ Walker::WalkerState::initState(ThreadContext * _tc,
 {
     assert(state == Ready);
     started = false;
-    tc = _tc;
-    mode = _mode;
-    timing = _isTiming;
+    tc      = _tc;
+    mode    = _mode;
+    timing  = _isTiming;
 }
 
 void
@@ -548,10 +548,11 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
       default:
         panic("Unknown page table walker state %d!\n");
     }
+
     if (doEndWalk) {
         if (doTLBInsert)
             if (!functional)
-                walker->tlb->insert(entry.vaddr, entry);
+                walker->tlb->insert(entry.vaddr, entry, tc);
         endWalk();
     } else {
       PacketPtr oldRead = read;
@@ -661,6 +662,7 @@ Walker::WalkerState::recvPacket(PacketPtr pkt)
     } else {
         sendPackets();
     }
+
     if (inflight == 0 && read == NULL && writes.size() == 0) {
         state = Ready;
         nextState = Waiting;

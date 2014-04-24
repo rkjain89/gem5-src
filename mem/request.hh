@@ -347,6 +347,13 @@ class Request
         privateFlags.set(VALID_PADDR);
     }
 
+    void
+    setVaddr(Addr vaddr) {
+        _vaddr = vaddr;
+        privateFlags.set(VALID_VADDR);
+    }
+        
+
     /**
      * Generate two requests as if this request had been split into two
      * pieces. The original request can't have been translated already.

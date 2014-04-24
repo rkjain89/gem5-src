@@ -209,10 +209,13 @@ class BaseCPU(MemObject):
     dcache_port = MasterPort("Data Port")
     _cached_ports = ['icache_port', 'dcache_port']
 
+#    if buildEnv['TARGET_ISA'] in ['x86', 'arm']:
+#        _cached_ports += ["itb.walker.port", "dtb.walker.port", "itb.tsb,port", "dtb.tsb,port"]
+
     if buildEnv['TARGET_ISA'] in ['x86', 'arm']:
         _cached_ports += ["itb.walker.port", "dtb.walker.port"]
 
-    _uncached_slave_ports = []
+    _uncached_slave_ports = ["itb.tsb,port", "dtb.tsb,port"]
     _uncached_master_ports = []
     if buildEnv['TARGET_ISA'] == 'x86':
         _uncached_slave_ports += ["interrupts.pio", "interrupts.int_slave"]
@@ -271,14 +274,24 @@ class BaseCPU(MemObject):
                 self.dtb.walker.port = dwc.cpu_side
                 self._cached_ports += ["itb_walker_cache.mem_side", \
                                        "dtb_walker_cache.mem_side"]
+#                self._cached_ports += ["itb_walker_cache.mem_side", \
+#                                       "dtb_walker_cache.mem_side",
+#                                       "itb.tsb.port",\
+#                                       "dtb.tsb.port"]
             else:
                 self._cached_ports += ["itb.walker.port", "dtb.walker.port"]
+#                self._cached_ports += ["itb.walker.port", "dtb.walker.port", \
+#                                       "itb.tsb.port", "dtb.tsb.port"]
 
             # Checker doesn't need its own tlb caches because it does
             # functional accesses only
             if self.checker != NULL:
                 self._cached_ports += ["checker.itb.walker.port", \
                                        "checker.dtb.walker.port"]
+#                self._cached_ports += ["checker.itb.walker.port", \
+#                                       "checker.dtb.walker.port", \
+#                                       "checker.itb.tsb.port", \
+#                                       "checker.dtb.tsb.port"]
 
     def addTwoLevelCacheHierarchy(self, ic, dc, l2c, iwc = None, dwc = None):
         self.addPrivateSplitL1Caches(ic, dc, iwc, dwc)

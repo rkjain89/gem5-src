@@ -1017,6 +1017,14 @@ BaseDynInst<Impl>::initiateTranslation(RequestPtr req, RequestPtr sreqLow,
             // fault. Overwrite any existing fault we might have from a previous
             // execution of this instruction (e.g. an uncachable load that
             // couldn't execute because it wasn't at the head of the ROB).
+
+            // Fault fault = walker->start(tc, translation, req, mode);
+            // if (timing || fault != NoFault) {
+            //     // This gets ignored in atomic mode.
+            //     delayedResponse = true;
+            //     return fault;
+            // }
+
             fault = NoFault;
 
             // Save memory requests.

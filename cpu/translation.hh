@@ -249,8 +249,8 @@ class DataTranslation : public BaseTLB::Translation
      * translation is complete if the state says so.
      */
     void
-    finish(Fault fault, RequestPtr req, ThreadContext *tc,
-           BaseTLB::Mode mode)
+    finish(Fault fault, RequestPtr req, 
+           ThreadContext *tc, BaseTLB::Mode mode)
     {
         assert(state);
         assert(mode == state->mode);

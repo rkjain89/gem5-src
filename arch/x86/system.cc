@@ -135,7 +135,10 @@ X86System::initState()
     const Addr PageDirPtrTable = 0x71000;
     const Addr PageDirTable[NumPDTs] =
         {0x72000, 0x73000, 0x74000, 0x75000};
-    const Addr GDTBase = 0x76000;
+
+    const Addr TSBBase = 0x76000;
+    const Addr GDTBase = 0x80000;
+
 
     const int PML4Bits = 9;
     const int PDPTBits = 9;
@@ -303,6 +306,9 @@ X86System::initState()
 
     //Point to the page tables.
     tc->setMiscReg(MISCREG_CR3, PageMapLevel4);
+    
+    // Point to the TSB
+    tc->setMiscReg(MISCREG_CR5, TSBBase);
 
     Efer efer = tc->readMiscRegNoEffect(MISCREG_EFER);
     //Enable long mode.

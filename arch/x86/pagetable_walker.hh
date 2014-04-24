@@ -146,7 +146,7 @@ namespace X86ISA
             void sendPackets();
             void endWalk();
             Fault pageFault(bool present);
-        };
+        }; // Class WalkerState
 
         friend class WalkerState;
         // State for timing and atomic accesses (need multiple per walker in
@@ -173,8 +173,8 @@ namespace X86ISA
 
       protected:
         // The TLB we're supposed to load.
-        TLB * tlb;
-        System * sys;
+        TLB*     tlb;
+        System*  sys;
         MasterID masterId;
 
         // The number of outstanding walks that can be squashed per cycle.
@@ -210,6 +210,6 @@ namespace X86ISA
             numSquashable(params->num_squash_per_cycle)
         {
         }
-    };
+    }; // class Walker
 }
 #endif // __ARCH_X86_PAGE_TABLE_WALKER_HH__

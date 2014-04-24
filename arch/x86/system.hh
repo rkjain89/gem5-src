@@ -79,10 +79,10 @@ class X86System : public System
 
   protected:
 
-    X86ISA::SMBios::SMBiosTable * smbiosTable;
+    X86ISA::SMBios::SMBiosTable *      smbiosTable;
     X86ISA::IntelMP::FloatingPointer * mpFloatingPointer;
-    X86ISA::IntelMP::ConfigTable * mpConfigTable;
-    X86ISA::ACPI::RSDP * rsdp;
+    X86ISA::IntelMP::ConfigTable *     mpConfigTable;
+    X86ISA::ACPI::RSDP *               rsdp;
 
     void writeOutSMBiosTable(Addr header,
             Addr &headerSize, Addr &tableSize, Addr table = 0);

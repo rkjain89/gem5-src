@@ -47,6 +47,7 @@
 #include "arch/x86/pagetable.hh"
 #include "arch/x86/pagetable_walker.hh"
 #include "arch/x86/tlb.hh"
+#include "arch/x86/tsb.hh"
 #include "arch/x86/x86_traits.hh"
 #include "base/bitfield.hh"
 #include "base/trace.hh"
@@ -74,16 +75,17 @@ TLB::TLB(const Params *p) : BaseTLB(p), configAddress(0), size(p->size),
         freeList.push_back(&tlb[x]);
     }
 
+    tsb    = p->tsb;
     walker = p->walker;
     walker->setTLB(this);
+    tsb->setTLB(this);
 }
 
-void
+TlbEntry
 TLB::evictLRU()
 {
     // Find the entry with the lowest (and hence least recently updated)
     // sequence number.
-
     unsigned lru = 0;
     for (unsigned i = 1; i < size; i++) {
         if (tlb[i].lruSeq < tlb[lru].lruSeq)
@@ -91,13 +93,16 @@ TLB::evictLRU()
     }
 
     assert(tlb[lru].trieHandle);
+    TlbEntry evictedEntry = tlb[lru];
     trie.remove(tlb[lru].trieHandle);
     tlb[lru].trieHandle = NULL;
     freeList.push_back(&tlb[lru]);
+    return evictedEntry;
 }
 
 TlbEntry *
-TLB::insert(Addr vpn, TlbEntry &entry)
+TLB::insert(Addr vpn, TlbEntry &entry, 
+            ThreadContext* tc)
 {
     // If somebody beat us to it, just use that existing entry.
     TlbEntry *newEntry = trie.lookup(vpn);
@@ -106,8 +111,19 @@ TLB::insert(Addr vpn, TlbEntry &entry)
         return newEntry;
     }
 
-    if (freeList.empty())
-        evictLRU();
+    if (freeList.empty()) {
+        TlbEntry evictedEntry = evictLRU();
+        Addr tsbAddr = tc->readMiscRegNoEffect(MISCREG_CR5);
+        tsb->setWriteEntry(evictedEntry);
+        int dataSize = 8;
+        RequestPtr req = new Request(tsbAddr,
+                                     dataSize, Request::UNCACHEABLE,
+                                     tsb->getMasterId());
+
+        PacketPtr write = new Packet(req, MemCmd::WriteReq);
+        tsb->lookup(evictedEntry.vaddr, true, req, write, tc, 0, walker, Write);
+        delete write;
+    }
 
     newEntry = freeList.front();
     freeList.pop_front();
@@ -140,6 +156,10 @@ TLB::flushAll()
             freeList.push_back(&tlb[i]);
         }
     }
+
+    // Whatever the scenario just go for shootdown!
+    tsb->flushAll();
+
 }
 
 void
@@ -159,6 +179,9 @@ TLB::flushNonGlobal()
             freeList.push_back(&tlb[i]);
         }
     }
+    
+    // Whatever the scenario just go for shootdown!
+    tsb->flushAll();
 }
 
 void
@@ -337,13 +360,26 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
             TlbEntry *entry = lookup(vaddr);
             if (!entry) {
                 if (FullSystem) {
-                    // Fault tsbFault = tsb->lookup(vaddr);
-                    Fault fault = walker->start(tc, translation, req, mode);
-                    if (timing || fault != NoFault) {
+                    // LOOK HERE
+                    PacketPtr write = NULL;
+                    TlbEntry* tsbEntry = tsb->lookup(vaddr, true, req, write, tc, translation, walker, mode);
+                    
+                    if (timing) { // Always true in my case
                         // This gets ignored in atomic mode.
                         delayedResponse = true;
-                        return fault;
+                        // fromTSB         = true;
+                        return NoFault;
                     }
+
+                    if (!tsbEntry) {
+                        Fault fault = walker->start(tc, translation, req, mode);
+                        if (timing || fault != NoFault) {
+                            // This gets ignored in atomic mode.
+                            delayedResponse = true;
+                            return fault;
+                        }
+                    }
+
                     entry = lookup(vaddr);
                     assert(entry);
                 } else {
@@ -367,7 +403,8 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
                         Addr alignedVaddr = p->pTable->pageAlign(vaddr);
                         DPRINTF(TLB, "Mapping %#x to %#x\n", alignedVaddr,
                                 newEntry.pageStart());
-                        entry = insert(alignedVaddr, newEntry);
+                        entry = insert(alignedVaddr, newEntry, tc);
+
                     }
                     DPRINTF(TLB, "Miss was serviced.\n");
                 }

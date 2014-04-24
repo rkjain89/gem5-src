@@ -42,18 +42,27 @@ from BaseTLB import BaseTLB
 from MemObject import MemObject
 
 class X86PagetableWalker(MemObject):
-    type = 'X86PagetableWalker'
-    cxx_class = 'X86ISA::Walker'
-    cxx_header = 'arch/x86/pagetable_walker.hh'
-    port = MasterPort("Port for the hardware table walker")
-    system = Param.System(Parent.any, "system object")
+    type                 = 'X86PagetableWalker'
+    cxx_class            = 'X86ISA::Walker'
+    cxx_header           = 'arch/x86/pagetable_walker.hh'
+    port                 = MasterPort("Port for the hardware table walker")
+    system               = Param.System(Parent.any, "system object")
     num_squash_per_cycle = Param.Unsigned(4,
             "Number of outstanding walks that can be squashed per cycle")
 
+class X86TSB(MemObject):
+    type       = 'X86TSB'
+    cxx_class  = 'X86ISA::TSB'
+    cxx_header = 'arch/x86/tsb.hh'
+    port       = MasterPort("Port for the TSB")
+    size       = Param.Unsigned(2048, "TSB Size")
+    system     = Param.System(Parent.any, "system object")
+
 class X86TLB(BaseTLB):
-    type = 'X86TLB'
-    cxx_class = 'X86ISA::TLB'
+    type       = 'X86TLB'
+    cxx_class  = 'X86ISA::TLB'
     cxx_header = 'arch/x86/tlb.hh'
-    size = Param.Unsigned(64, "TLB size")
-    walker = Param.X86PagetableWalker(\
+    size       = Param.Unsigned(64, "TLB size")
+    tsb        = Param.X86TSB(X86TSB(), "TSB")
+    walker     = Param.X86PagetableWalker( \
             X86PagetableWalker(), "page table walker")

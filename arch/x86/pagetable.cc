@@ -41,6 +41,7 @@
 #include "arch/x86/isa_traits.hh"
 #include "arch/x86/pagetable.hh"
 #include "sim/serialize.hh"
+#include "base/misc.hh"
 
 namespace X86ISA
 {

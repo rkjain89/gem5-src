@@ -60,11 +60,14 @@ class Packet;
 namespace X86ISA
 {
     class Walker;
+    class TSB;
 
     class TLB : public BaseTLB
     {
       protected:
         friend class Walker;
+        
+        friend class TSB;
 
         typedef std::list<TlbEntry *> EntryList;
 
@@ -83,7 +86,8 @@ namespace X86ISA
 
         EntryList::iterator lookupIt(Addr va, bool update_lru = true);
 
-        Walker * walker;
+        Walker* walker;
+        TSB*    tsb;
 
       public:
         Walker *getWalker();
@@ -97,7 +101,7 @@ namespace X86ISA
       protected:
         uint32_t size;
 
-        TlbEntry * tlb;
+        TlbEntry* tlb;
 
         EntryList freeList;
 
@@ -112,7 +116,7 @@ namespace X86ISA
 
       public:
 
-        void evictLRU();
+        TlbEntry evictLRU();
 
         uint64_t
         nextSeq()
@@ -144,7 +148,8 @@ namespace X86ISA
         Fault finalizePhysical(RequestPtr req, ThreadContext *tc,
                                Mode mode) const;
 
-        TlbEntry * insert(Addr vpn, TlbEntry &entry);
+        TlbEntry * insert(Addr vpn, TlbEntry &entry,
+                          ThreadContext* tc);
 
         // Checkpointing
         virtual void serialize(std::ostream &os);
@@ -158,8 +163,8 @@ namespace X86ISA
          * reference. For X86 this method will always return a valid
          * port pointer.
          *
-         * @return A pointer to the walker master port
-         */
+         * @return A pointer to the walker master port 
+        */
         virtual BaseMasterPort *getMasterPort();
     };
 }

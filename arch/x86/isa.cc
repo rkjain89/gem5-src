@@ -129,10 +129,10 @@ ISA::readMiscRegNoEffect(int miscReg)
     // Make sure we're not dealing with an illegal control register.
     // Instructions should filter out these indexes, and nothing else should
     // attempt to read them directly.
-    assert( miscReg != MISCREG_CR1 &&
-            !(miscReg > MISCREG_CR4 &&
-              miscReg < MISCREG_CR8) &&
-            !(miscReg > MISCREG_CR8 &&
+    assert( miscReg   != MISCREG_CR1   &&
+            !((miscReg > MISCREG_CR5   &&
+              miscReg < MISCREG_CR8))  &&
+            !(miscReg > MISCREG_CR8    &&
               miscReg <= MISCREG_CR15));
 
     return regVal[miscReg];
@@ -160,10 +160,10 @@ ISA::setMiscRegNoEffect(int miscReg, MiscReg val)
     // Make sure we're not dealing with an illegal control register.
     // Instructions should filter out these indexes, and nothing else should
     // attempt to write to them directly.
-    assert( miscReg != MISCREG_CR1 &&
-            !(miscReg > MISCREG_CR4 &&
+    assert( miscReg != MISCREG_CR1   &&
+            !(miscReg > MISCREG_CR5  &&
               miscReg < MISCREG_CR8) &&
-            !(miscReg > MISCREG_CR8 &&
+            !(miscReg > MISCREG_CR8  &&
               miscReg <= MISCREG_CR15));
     regVal[miscReg] = val;
 }

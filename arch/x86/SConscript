@@ -69,6 +69,7 @@ if env['TARGET_ISA'] == 'x86':
     Source('stacktrace.cc')
     Source('system.cc')
     Source('tlb.cc')
+    Source('tsb.cc')
     Source('types.cc')
     Source('utility.cc')
     Source('vtophys.cc')

@@ -494,7 +494,7 @@ class System : public MemObject
 
     unsigned int drain(DrainManager *dm);
     void drainResume();
-
+ 
   public:
     Counter totalNumInsts;
     EventQueue instEventQueue;
