@@ -109,7 +109,7 @@ protected:
 
         void           retry();
         void           sendPackets();
-        void           initState(Addr, bool, RequestPtr, PacketPtr&, bool, 
+        void           initState(Addr, bool, RequestPtr, PacketPtr, bool, 
                                  ThreadContext*, BaseTLB::Translation*,
                                  Walker*, BaseTLB::Mode);
 
@@ -192,12 +192,12 @@ public:
     bool sendTiming(TSBState*, PacketPtr);
     
 
-    TlbEntry* readTSB(Addr, bool, PacketPtr&, ThreadContext*, 
+    TlbEntry* readTSB(Addr, bool, PacketPtr, ThreadContext*, 
                       TLB::Translation*, RequestPtr, BaseTLB::Mode);
 
     TlbEntry* lookup(Addr, bool, RequestPtr, PacketPtr&, ThreadContext*, 
                      TLB::Translation*, Walker*, BaseTLB::Mode);
-    TlbEntry* insert(Addr);
+    TlbEntry* insert(Addr, BaseTLB::Mode);
 
     uint64_t nextSeq() {
         return ++lruSeq;

@@ -121,7 +121,8 @@ TLB::insert(Addr vpn, TlbEntry &entry,
                                      tsb->getMasterId());
 
         PacketPtr write = new Packet(req, MemCmd::WriteReq);
-        tsb->lookup(evictedEntry.vaddr, true, req, write, tc, 0, walker, Write);
+        tsb->lookup(evictedEntry.vaddr, true, req, write, tc, 0, walker, Read);
+        delete req;
         delete write;
     }
 
@@ -361,15 +362,16 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
             if (!entry) {
                 if (FullSystem) {
                     // LOOK HERE
-                    PacketPtr write = NULL;
-                    TlbEntry* tsbEntry = tsb->lookup(vaddr, true, req, write, tc, translation, walker, mode);
+                    // PacketPtr write    = NULL;
+                    TlbEntry* tsbEntry = NULL;
+                    // tsbEntry           = tsb->lookup(vaddr, true, req, write, tc, translation, walker, mode);
                     
-                    if (timing) { // Always true in my case
-                        // This gets ignored in atomic mode.
-                        delayedResponse = true;
-                        // fromTSB         = true;
-                        return NoFault;
-                    }
+                    // if (timing) { // Always true in my case
+                    //     // This gets ignored in atomic mode.
+                    //     delayedResponse = true;
+                    //     // fromTSB         = true;
+                    //     return NoFault;
+                    // }
 
                     if (!tsbEntry) {
                         Fault fault = walker->start(tc, translation, req, mode);

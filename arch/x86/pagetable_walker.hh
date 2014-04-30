@@ -171,12 +171,22 @@ namespace X86ISA
         BaseMasterPort &getMasterPort(const std::string &if_name,
                                       PortID idx = InvalidPortID);
 
+        void setNumTSBHits(int _numHits) {
+            numTSBHits = _numHits;
+        }
+
+        int getNumTSBHits() {
+            return numTSBHits;
+        }
+
       protected:
         // The TLB we're supposed to load.
         TLB*     tlb;
         System*  sys;
         MasterID masterId;
-
+        
+        int numTSBHits;
+        
         // The number of outstanding walks that can be squashed per cycle.
         unsigned numSquashable;
 
@@ -187,6 +197,7 @@ namespace X86ISA
         bool recvTimingResp(PacketPtr pkt);
         void recvRetry();
         bool sendTiming(WalkerState * sendingState, PacketPtr pkt);
+
 
       public:
 

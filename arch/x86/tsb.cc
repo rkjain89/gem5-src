@@ -168,11 +168,33 @@ TSB::recvTimingResp(PacketPtr pkt)
 }
 
 TlbEntry*
-TSB::insert(Addr vpn)
+TSB::insert(Addr vpn, BaseTLB::Mode mode)
 {
     TlbEntry *newEntry = trie.lookup(vpn);
+
+    if (mode == BaseTLB::Write) {
+        if (newEntry) {
+            unsigned lru = -1;
+            for (unsigned i = 0; i < size; i++) {
+                if (tsbEntries[i].vaddr == vpn)
+                    lru = i;
+            }
+
+            assert(lru > 0);
+            trie.remove(tsbEntries[lru].trieHandle);
+            tsbEntries[lru].trieHandle = NULL;
+            freeList.push_back(&tsbEntries[lru]);
+        }
+        return NULL;
+    }
+
     if (newEntry) {
-        assert(newEntry->vaddr == vpn);
+        // assert(newEntry->vaddr == vpn);
+        assert(writeEntry.vaddr != UINTMAX_MAX);
+        *newEntry        = writeEntry;
+        newEntry->lruSeq = nextSeq();
+        newEntry->vaddr  = vpn;
+        assert(newEntry);
         return newEntry;
     }
 
@@ -198,7 +220,7 @@ TSB::insert(Addr vpn)
 TlbEntry*
 TSB::readTSB(Addr                 va, 
              bool                 update_lru,
-             PacketPtr&           write,
+             PacketPtr            write,
              ThreadContext*       tc,
              TLB::Translation*    translation,
              RequestPtr           req,
@@ -206,7 +228,7 @@ TSB::readTSB(Addr                 va,
 {
     TlbEntry* entry = NULL;
     if (write) {
-        entry = insert(va);
+        entry = insert(va, mode);
         // How do I model the actual write??? Or is it done???
         return entry;
     }
@@ -217,16 +239,17 @@ TSB::readTSB(Addr                 va,
 
     if (entry) {
         tlb->insert(entry->vaddr, *entry, tc);
-    } else {
-        (tlb->getWalker())->start(tc, translation, req, mode);
-        // if (sys->isTimingMode()) {
-        //     // This gets ignored in atomic mode.
-        //     delayedResponse = true;
-        // }
-        return NULL;
+        return entry;
     }
+    // else {
+    //   (tlb->getWalker())->start(tc, translation, req, mode);
+    // if (sys->isTimingMode()) {
+    //     // This gets ignored in atomic mode.
+    //     delayedResponse = true;
+    // }
+    return NULL;
+    // }
     
-    return entry;
 }
 
 TlbEntry*
@@ -244,39 +267,38 @@ TSB::lookup(Addr                  va,
                         sys->isTimingMode(), tc, 
                         translation, walker, mode);
 
-    int dataSize = 8;
+    // int dataSize = 8;
     
-    Request::Flags flags = req->getFlags();
-    flags.set(Request::PHYSICAL, true);
-    flags.set(Request::UNCACHEABLE, true);
-    Addr       tsbAddr = tc->readMiscRegNoEffect(MISCREG_CR5);
-    RequestPtr request = new Request(tsbAddr, dataSize, 
-                                     flags, masterId);
-    request->setVaddr(va);
-    newState->setRequestPtr(request);
+    // Request::Flags flags = req->getFlags();
+    // flags.set(Request::PHYSICAL, true);
+    // flags.set(Request::UNCACHEABLE, true);
+    // Addr       tsbAddr = tc->readMiscRegNoEffect(MISCREG_CR5);
+    // RequestPtr request = new Request(tsbAddr, dataSize, 
+    //                                  flags, masterId);
+    // request->setVaddr(va);
+    // newState->setRequestPtr(request);
 
 
-    if (!currStates.empty()) {
-        assert(newState->isTiming());
-        currStates.push_back(newState);
-        return NULL;
-    } else {
-        if (mode == BaseTLB::Execute) 
-            currStates.push_back(newState);
-        TlbEntry* entry = newState->startTranslation();
-        if (!newState->isTiming()) {
-            currStates.pop_front();
-            delete newState;
-        }
-        if (mode != BaseTLB::Execute) 
-            delete newState;
-        return entry;
-    }
+    // if (!currStates.empty()) {
+    //     panic("Not implemented yet\n");
+    //     return NULL;
+    // } else {
+    // if (mode == BaseTLB::Execute) 
+    // currStates.push_back(newState);
+    TlbEntry* entry = newState->startTranslation();
+    // if (!newState->isTiming()) {
+    // currStates.pop_back();
+    delete newState;
+    // }
+    // if (mode != BaseTLB::Execute) 
+    // delete newState;
+    return entry;
+    // }
 }
 
 void
 TSB::TSBState::initState(Addr _va, bool _update_lru, 
-                         RequestPtr _req, PacketPtr& _write, 
+                         RequestPtr _req, PacketPtr _write, 
                          bool _timing, ThreadContext* _tc,
                          TLB::Translation* _translation,
                          Walker* _walker, BaseTLB::Mode _mode)
@@ -295,31 +317,41 @@ TSB::TSBState::initState(Addr _va, bool _update_lru,
 TlbEntry*
 TSB::TSBState::startTranslation()
 {
-    TlbEntry* entry = NULL;
-    started         = true;
-    Addr     addr   = virtAddr;
-    if (!writePtr) {
-        // tsb->setWriteEntry(evictedEntry);
-        // RequestPtr req = new Request(tsb->getAddr(),
-        read = new Packet(req, MemCmd::ReadReq);
-        read->allocate();
-    }
+    TlbEntry*  entry   = NULL;
+    started            = true;
+    Addr       addr    = virtAddr;
+    static int numHits = 0;
+    // if (!writePtr) {
+    //     // tsb->setWriteEntry(evictedEntry);
+    //     // RequestPtr req = new Request(tsb->getAddr(),
+    //     read = new Packet(req, MemCmd::ReadReq);
+    //     read->allocate();
+    // }
 
     if (timing) {
-        if (mode == BaseTLB::Execute) {
-            nextState = state;
-            state = Waiting;
-            sendPackets();
-            return NULL;
-        } else {
-            walker->start(tc, translation, tlbReq, mode);
+        nextState = state;
+        state     = Waiting;
+        entry     = tsb->readTSB(addr, true, writePtr, tc, 
+                                 translation, tlbReq, mode);
+        if (entry) {
+            numHits ++;
+            return entry;
         }
+        
+        walker->setNumTSBHits(numHits);
+        numHits = 0;
+        // sendPackets();
+        // return NULL;
+        // } else {
+        // walker->start(tc, translation, tlbReq, mode);
+        // }
+        return NULL;
     } else {
         do {
             tsb->port.sendAtomic(read);
             PacketPtr write = NULL;
-            entry = tsb->readTSB(addr, true, write, tc, translation, tlbReq, mode);
-            state = nextState;
+            entry     = tsb->readTSB(addr, true, writePtr, tc, translation, tlbReq, mode);
+            state     = nextState;
             nextState = Ready;
             if (write)
                 tsb->port.sendAtomic(write);
@@ -328,7 +360,7 @@ TSB::TSBState::startTranslation()
         nextState = Waiting;
     }
     
-    return retEntry;
+    return entry;
 }
 
 void
@@ -362,6 +394,10 @@ TSB::flushAll()
             freeList.push_back(&tsbEntries[i]);
         }
     }
+
+    // if (!currStates.empty()) {
+    //     currStates.pop_front();
+    // }
 }
 
 BaseMasterPort &

@@ -89,6 +89,7 @@ Walker::start(ThreadContext * _tc, BaseTLB::Translation *_translation,
     // another one (i.e. either coalesce or start walk)
     WalkerState * newState = new WalkerState(this, _translation, _req);
     newState->initState(_tc, _mode, sys->isTimingMode());
+    numTSBHits = 0;
     if (currStates.size()) {
         assert(newState->isTiming());
         DPRINTF(PageTableWalker, "Walks in progress: %d\n", currStates.size());
@@ -296,10 +297,11 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
     bool  badNX       = pte.nx && mode == BaseTLB::Execute && enableNX;
 
     static int counter = 0;
-
+    int numDelays = (6 + walker->getNumTSBHits() + 1); // 6*4 = 24 (Obvious) + Number of Hits + 1 general access
+    
     switch(state) {
       case LongPML4:
-        if (counter != 3) {
+        if (counter != (numDelays)) {
           ++counter;
           nextState      = LongPML4;
           nextRead       = read->getAddr();
@@ -313,6 +315,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
           entry.writable = pte.w;
           entry.noExec   = pte.nx;
           entry.user     = pte.u;
+          walker->setNumTSBHits(0);
         }
 
         DPRINTF(PageTableWalker,
@@ -324,7 +327,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         }
         break;
       case LongPDP:
-        if (counter != 3) {
+        if (counter != 6) {
           nextState      = LongPDP;
           nextRead       = read->getAddr();
           uncacheable    = true;
@@ -348,7 +351,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         }
         break;
       case LongPD:
-        if (counter != 3) {
+        if (counter != 6) {
           nextState      = LongPD;
           nextRead       = read->getAddr();
           uncacheable    = true;
@@ -388,7 +391,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         }
         break;
       case LongPTE:
-        if (counter != 3) {
+        if (counter != 6) {
           nextState      = LongPTE;
           nextRead       = read->getAddr();
           uncacheable    = true;
