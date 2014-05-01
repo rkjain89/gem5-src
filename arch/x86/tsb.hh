@@ -167,6 +167,8 @@ public:
         
     void flushAll();
 
+    void flushNonGlobal();
+
     BaseMasterPort &getMasterPort(const std::string &if_name,
                                   PortID idx = InvalidPortID);
     
@@ -174,8 +176,6 @@ public:
         return masterId;
     }
         
-    void flushNonGlobal();
-
     void setTLB(TLB* _tlb) {
         tlb = _tlb;
     }

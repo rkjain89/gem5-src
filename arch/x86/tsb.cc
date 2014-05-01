@@ -170,7 +170,16 @@ TSB::recvTimingResp(PacketPtr pkt)
 TlbEntry*
 TSB::insert(Addr vpn, BaseTLB::Mode mode)
 {
-    TlbEntry *newEntry = trie.lookup(vpn);
+
+    TlbEntry* newEntry = NULL;
+    for (int i = 0; i < size; ++i) {
+        if (tsbEntries[i].vaddr == vpn) {
+            newEntry = &tsbEntries[i];
+            break;
+        } 
+    }
+
+    // TlbEntry *newEntry = trie.lookup(vpn);
 
     if (mode == BaseTLB::Write) {
         if (newEntry) {
@@ -181,8 +190,8 @@ TSB::insert(Addr vpn, BaseTLB::Mode mode)
             }
 
             assert(lru > 0);
-            trie.remove(tsbEntries[lru].trieHandle);
-            tsbEntries[lru].trieHandle = NULL;
+            // trie.remove(tsbEntries[lru].trieHandle);
+            // tsbEntries[lru].trieHandle = NULL;
             freeList.push_back(&tsbEntries[lru]);
         }
         return NULL;
@@ -205,15 +214,16 @@ TSB::insert(Addr vpn, BaseTLB::Mode mode)
     freeList.pop_front();
 
     assert(writeEntry.vaddr != UINTMAX_MAX);
-    *newEntry        = writeEntry;
-    newEntry->lruSeq = nextSeq();
-    newEntry->vaddr  = vpn;
+    *newEntry            = writeEntry;
+    newEntry->lruSeq     = nextSeq();
+    newEntry->vaddr      = vpn;
+    newEntry->trieHandle = NULL;
     writeEntry.updateVaddr(UINTMAX_MAX);
     // writeEntry       = NULL;
 
     // Do the actual insert here! 
-    newEntry->trieHandle =
-    trie.insert(vpn, TlbEntryTrie::MaxBits - writeEntry.logBytes, newEntry);
+    // newEntry->trieHandle =
+    // trie.insert(vpn, TlbEntryTrie::MaxBits - writeEntry.logBytes, newEntry);
     return newEntry;
 }
 
@@ -233,12 +243,27 @@ TSB::readTSB(Addr                 va,
         return entry;
     }
 
-    entry = trie.lookup(va);
+    int i = 0;
+    for (; i < size; ++i) {
+        if (tsbEntries[i].lruSeq == 0)
+            continue;
+
+        if (tsbEntries[i].vaddr == va) {
+            entry = &tsbEntries[i];
+            break;
+        } 
+    }
+
+    // entry = trie.lookup(va);
+
     if (entry && update_lru)
         entry->lruSeq = nextSeq();
 
     if (entry) {
         tlb->insert(entry->vaddr, *entry, tc);
+        tsbEntries[i].trieHandle = NULL;
+        tsbEntries[i].lruSeq     = 0;
+        freeList.push_back(&tsbEntries[i]);
         return entry;
     }
     // else {
@@ -374,8 +399,8 @@ TSB::evictLRU() {
             lru = i;
     }
 
-    assert(tsbEntries[lru].trieHandle);
-    trie.remove(tsbEntries[lru].trieHandle);
+    // assert(tsbEntries[lru].trieHandle);
+    // trie.remove(tsbEntries[lru].trieHandle);
     tsbEntries[lru].trieHandle = NULL;
     freeList.push_back(&tsbEntries[lru]);
 }
@@ -388,9 +413,11 @@ TSB::flushAll()
         return;
 
     for (unsigned i = 0; i < size; i++) {
-        if (tsbEntries[i].trieHandle) {
-            trie.remove(tsbEntries[i].trieHandle);
+        // if (tsbEntries[i].trieHandle) {
+        if (tsbEntries[i].lruSeq != 0) {
+            // trie.remove(tsbEntries[i].trieHandle);
             tsbEntries[i].trieHandle = NULL;
+            tsbEntries[i].lruSeq     = 0;
             freeList.push_back(&tsbEntries[i]);
         }
     }
@@ -399,6 +426,21 @@ TSB::flushAll()
     //     currStates.pop_front();
     // }
 }
+
+void
+TSB::flushNonGlobal()
+{
+    for (unsigned i = 0; i < size; i++) {
+        // if (tsbEntries[i].trieHandle && !tsbEntries[i].global) {
+        if (!tsbEntries[i].global && tsbEntries[i].lruSeq != 0) {
+            // trie.remove(tsbEntries[i].trieHandle);
+            tsbEntries[i].lruSeq     = 0;
+            tsbEntries[i].trieHandle = NULL;
+            freeList.push_back(&tsbEntries[i]);
+        }
+    }
+}
+
 
 BaseMasterPort &
 TSB::getMasterPort(const std::string &if_name, PortID idx)

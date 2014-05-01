@@ -359,12 +359,17 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
             DPRINTF(TLB, "Paging enabled.\n");
             // The vaddr already has the segment base applied.
             TlbEntry *entry = lookup(vaddr);
+
+            if (mode == Write) {
+                tsb->flushAll();
+            }
+
             if (!entry) {
                 if (FullSystem) {
                     // LOOK HERE
-                    // PacketPtr write    = NULL;
-                    TlbEntry* tsbEntry = NULL;
-                    // tsbEntry           = tsb->lookup(vaddr, true, req, write, tc, translation, walker, mode);
+                    PacketPtr write    = NULL;
+                    // TlbEntry* tsbEntry = NULL;
+                    TlbEntry* tsbEntry = tsb->lookup(vaddr, true, req, write, tc, translation, walker, mode);
                     
                     // if (timing) { // Always true in my case
                     //     // This gets ignored in atomic mode.
